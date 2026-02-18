@@ -1,3 +1,20 @@
+# Core dependencies
 pytesseract>=0.3.10
 Pillow>=9.0.0
 pyperclip>=1.8.0
+
+# Cross-platform screenshot
+mss>=9.0.0
+
+# Hotkey and keyboard simulation
+pynput>=1.7.0
+pyautogui>=0.9.50
+
+# LaTeX OCR (optional - for math formula conversion)
+# Uncomment if you need LaTeX conversion:
+# pix2tex>=0.1.0
+# torch>=1.9.0
+# transformers>=4.0.0
+
+# Windows-specific (optional)
+# pywin32>=300; sys_platform == 'win32'
