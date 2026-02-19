@@ -78,22 +78,41 @@ def setup_tesseract() -> Optional[str]:
     # Fall back to system Tesseract
     return None
 
+
 # Lazy-loaded LaTeX OCR model
 _latex_model = None
 
 
 def _get_latex_model():
-    """Lazy load the LaTeX OCR model."""
+    """
+    Lazy load the UniMERNet LaTeX OCR model.
+
+    Returns:
+        UniMERNet model instance or None if unavailable.
+    """
     global _latex_model
     if _latex_model is None:
         try:
-            from pix2tex.cli import LatexOCR
-            _latex_model = LatexOCR()
+            from unimernet.tasks import uni_mernet_task
+            from unimernet.common.config import Config
+
+            # Set model path for bundled or system
+            if getattr(sys, 'frozen', False):
+                model_path = os.path.join(sys._MEIPASS, 'models', 'unimernet')
+                if os.path.exists(model_path):
+                    os.environ['UNIMERNET_MODEL_PATH'] = model_path
+
+            # Initialize the model
+            _latex_model = uni_mernet_task(
+                model_name='unimernet',
+                device='cpu'  # Use CPU for compatibility, can be changed to 'cuda'
+            )
         except ImportError:
-            print("Warning: pix2tex not installed. LaTeX conversion unavailable.")
+            print("Warning: unimernet not installed. LaTeX conversion unavailable.")
+            print("Install with: pip install unimernet-small")
             return None
         except Exception as e:
-            print(f"Warning: Could not load LaTeX model: {e}")
+            print(f"Warning: Could not load UniMERNet model: {e}")
             return None
     return _latex_model
 
@@ -113,14 +132,15 @@ def detect_math_content(text: str) -> bool:
         r'[=+\-*/^]',  # Basic operators
         r'[∑∫∏∂∇]',    # Calculus symbols
         r'[α-ωΑ-Ω]',   # Greek letters
+        r'[<>≤≥≠±×÷]',  # Comparison and special operators
+        r'\d+\s*[xy]\s*=',  # Equations
+        r'[xy]\s*\^',  # Powers
         r'\\frac',     # LaTeX fractions
         r'\\sqrt',     # Square roots
         r'\\sum',      # Summation
         r'\\int',      # Integral
-        r'[x-z]\s*[=^]',  # Variables with operators
-        r'\d+\s*[xy]\s*=',  # Equations
-        r'\([x-z]\)',  # Variables in parentheses
-        r'\\[a-zA-Z]+',  # LaTeX commands
+        r'\[[^\]]+\]',  # Brackets often used in math
+        r'\{[^}]+\}',   # Braces
     ]
 
     for pattern in math_patterns:
@@ -152,6 +172,34 @@ def contains_math_symbols(image: Image.Image) -> bool:
         return detect_math_content(text)
     except Exception:
         return False
+
+
+def preprocess_for_latex(image: Image.Image) -> Image.Image:
+    """
+    Preprocess image for better LaTeX OCR results.
+
+    Args:
+        image: PIL Image to preprocess.
+
+    Returns:
+        Preprocessed image.
+    """
+    import numpy as np
+
+    # Convert to grayscale
+    if image.mode != 'L':
+        gray = image.convert('L')
+    else:
+        gray = image
+
+    # Convert to numpy for processing
+    img_array = np.array(gray)
+
+    # Binarization using Otsu's method
+    from PIL import ImageOps
+    threshold = ImageOps.autocontrast(gray).point(lambda x: 0 if x < 128 else 255, '1')
+
+    return threshold.convert('L')
 
 
 def extract_text(
@@ -223,14 +271,15 @@ def extract_text(
         print(f"Error during OCR: {e}")
         text = ""
 
-    # LaTeX conversion
+    # LaTeX conversion using UniMERNet
     latex_result = None
 
     if latex_mode or (auto_detect_math and contains_math_symbols(image)):
         model = _get_latex_model()
         if model is not None:
             try:
-                latex_result = model(image)
+                # Use UniMERNet to convert image to LaTeX
+                latex_result = model.inference(image)
                 if latex_result:
                     latex_result = latex_result.strip()
             except Exception as e:

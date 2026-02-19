@@ -69,6 +69,44 @@ jobs:
           cp /opt/homebrew/share/tessdata/eng.traineddata tessdata/
           cp /opt/homebrew/share/tessdata/chi_sim.traineddata tessdata/ 2>/dev/null || curl -L -o tessdata/chi_sim.traineddata https://github.com/tesseract-ocr/tessdata/raw/main/chi_sim.traineddata
 
+      - name: Download UniMERNet model
+        run: |
+          python -c "
+          from unimernet.tasks import uni_mernet_task
+          import os
+          import shutil
+
+          # Download and cache the model
+          print('Downloading UniMERNet model...')
+          model = uni_mernet_task(model_name='unimernet', device='cpu')
+
+          # Find the model cache location
+          cache_dir = os.path.expanduser('~/.cache/huggingface/hub')
+          print(f'Model cached in: {cache_dir}')
+
+          # List downloaded files
+          for root, dirs, files in os.walk(cache_dir):
+              for f in files:
+                  print(os.path.join(root, f))
+          "
+
+          # Copy model to models directory
+          mkdir -p models
+          cp -r ~/.cache/huggingface/hub/models--Norm--UniMERNet models/ 2>/dev/null || true
+          cp -r ~/.cache/huggingface/hub/models--openai--clip-vit-base-patch32 models/ 2>/dev/null || true
+
+          # If model not found, download manually
+          if [ ! -d "models/models--Norm--UniMERNet" ]; then
+              echo "Downloading UniMERNet manually..."
+              pip install huggingface_hub
+              python -c "
+              from huggingface_hub import snapshot_download
+              import os
+              os.makedirs('models', exist_ok=True)
+              snapshot_download(repo_id='Norm/UniMERNet', local_dir='models/UniMERNet')
+              "
+          fi
+
       - name: Build macOS app
         run: |
           python -m PyInstaller \
@@ -86,9 +124,15 @@ jobs:
             --hidden-import "snapocr.platform.base" \
             --hidden-import "snapocr.platform.macos" \
             --hidden-import "snapocr.platform.macos_native" \
+            --hidden-import "torch" \
+            --hidden-import "torchvision" \
+            --hidden-import "transformers" \
+            --hidden-import "unimernet" \
+            --hidden-import "numpy" \
             --add-data "snapocr:snapocr" \
             --add-data "tesseract:tesseract" \
             --add-data "tessdata:tessdata" \
+            --add-data "models:models" \
             --add-binary "lib:lib" \
             --osx-bundle-identifier "com.snapocr.app" \
             --target-arch arm64 \
@@ -160,6 +204,34 @@ jobs:
         env:
           TESSERACT_VERSION: '5.3.3'
 
+      - name: Download UniMERNet model
+        run: |
+          python -c "
+          from unimernet.tasks import uni_mernet_task
+          print('Downloading UniMERNet model...')
+          model = uni_mernet_task(model_name='unimernet', device='cpu')
+          print('Model downloaded successfully')
+          "
+
+          # Copy model to models directory
+          New-Item -ItemType Directory -Force -Path "models"
+          $cacheDir = "$env:USERPROFILE\.cache\huggingface\hub"
+          if (Test-Path "$cacheDir\models--Norm--UniMERNet") {
+            Copy-Item -Recurse "$cacheDir\models--Norm--UniMERNet" "models/"
+          }
+
+          # Download manually if not cached
+          if (-not (Test-Path "models\models--Norm--UniMERNet")) {
+            Write-Host "Downloading UniMERNet manually..."
+            pip install huggingface_hub
+            python -c "
+            from huggingface_hub import snapshot_download
+            import os
+            os.makedirs('models', exist_ok=True)
+            snapshot_download(repo_id='Norm/UniMERNet', local_dir='models/UniMERNet')
+            "
+          }
+
       - name: Build Windows executable
         run: |
           pyinstaller `
@@ -176,9 +248,15 @@ jobs:
             --hidden-import "snapocr.core.clipboard" `
             --hidden-import "snapocr.platform.base" `
             --hidden-import "snapocr.platform.windows" `
+            --hidden-import "torch" `
+            --hidden-import "torchvision" `
+            --hidden-import "transformers" `
+            --hidden-import "unimernet" `
+            --hidden-import "numpy" `
             --add-data "snapocr;snapocr" `
             --add-data "tesseract;tesseract" `
             --add-data "tessdata;tessdata" `
+            --add-data "models;models" `
             --exclude-module "pynput" `
             --exclude-module "pyautogui" `
             run.py
@@ -228,6 +306,31 @@ jobs:
             cp "$lib" lib/ 2>/dev/null || true
           done
 
+      - name: Download UniMERNet model
+        run: |
+          python -c "
+          from unimernet.tasks import uni_mernet_task
+          print('Downloading UniMERNet model...')
+          model = uni_mernet_task(model_name='unimernet', device='cpu')
+          print('Model downloaded successfully')
+          "
+
+          # Copy model to models directory
+          mkdir -p models
+          cp -r ~/.cache/huggingface/hub/models--Norm--UniMERNet models/ 2>/dev/null || true
+
+          # Download manually if not cached
+          if [ ! -d "models/models--Norm--UniMERNet" ]; then
+              echo "Downloading UniMERNet manually..."
+              pip install huggingface_hub
+              python -c "
+              from huggingface_hub import snapshot_download
+              import os
+              os.makedirs('models', exist_ok=True)
+              snapshot_download(repo_id='Norm/UniMERNet', local_dir='models/UniMERNet')
+              "
+          fi
+
       - name: Build Linux executable
         run: |
           python -m PyInstaller \
@@ -243,9 +346,15 @@ jobs:
             --hidden-import "snapocr.core.clipboard" \
             --hidden-import "snapocr.platform.base" \
             --hidden-import "snapocr.platform.linux" \
+            --hidden-import "torch" \
+            --hidden-import "torchvision" \
+            --hidden-import "transformers" \
+            --hidden-import "unimernet" \
+            --hidden-import "numpy" \
             --add-data "snapocr:snapocr" \
             --add-data "tesseract:tesseract" \
             --add-data "tessdata:tessdata" \
+            --add-data "models:models" \
             --add-binary "lib:lib" \
             --exclude-module "pynput" \
             --exclude-module "pyautogui" \
@@ -302,12 +411,13 @@ jobs:
             ## SnapOCR ${{ steps.version.outputs.version }}
 
             ### Downloads
-            - **macOS**: `SnapOCR-macOS-arm64.zip` (Apple Silicon, includes Tesseract)
-            - **Windows**: `SnapOCR.exe` (includes Tesseract)
-            - **Linux**: `SnapOCR` (includes Tesseract)
+            - **macOS**: `SnapOCR-macOS-arm64.zip` (Apple Silicon)
+            - **Windows**: `SnapOCR.exe`
+            - **Linux**: `SnapOCR`
 
             ### Features
             - Tesseract OCR bundled - no external installation required
+            - UniMERNet for accurate LaTeX math formula recognition
             - Supports English and Chinese (Simplified) OCR
             - Copy recognized text to clipboard with one click
 

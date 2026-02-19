@@ -11,11 +11,12 @@ pyobjc-core>=10.0; sys_platform == 'darwin'
 pyobjc-framework-Quartz>=10.0; sys_platform == 'darwin'
 pyobjc-framework-Cocoa>=10.0; sys_platform == 'darwin'
 
-# LaTeX OCR (optional - for math formula conversion)
-# Uncomment if you need LaTeX conversion:
-# pix2tex>=0.1.0
-# torch>=1.9.0
-# transformers>=4.0.0
+# LaTeX OCR - UniMERNet (best accuracy for math formulas)
+unimernet-small>=0.1.0
+torch>=2.0.0
+torchvision>=0.15.0
+transformers>=4.30.0
+numpy>=1.24.0
 
 # Windows-specific (optional)
 # pywin32>=300; sys_platform == 'win32'
