@@ -3,7 +3,7 @@ Abstract base classes for platform-specific implementations.
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional, Tuple, Callable
+from typing import Optional
 
 
 class BaseScreenshotCapture(ABC):
@@ -66,74 +66,6 @@ class BaseClipboardManager(ABC):
         """
         pass
 
-    @abstractmethod
-    def simulate_paste(self) -> bool:
-        """
-        Simulate a paste keyboard shortcut (Ctrl+V or Cmd+V).
-
-        Returns:
-            True if successful, False otherwise.
-        """
-        pass
-
-
-class BaseHotkeyManager(ABC):
-    """Abstract base class for hotkey management."""
-
-    @abstractmethod
-    def register(self, hotkey: str, callback: Callable[[], None]) -> bool:
-        """
-        Register a global hotkey.
-
-        Args:
-            hotkey: Hotkey string (e.g., "ctrl+shift+o", "cmd+shift+o").
-            callback: Function to call when hotkey is pressed.
-
-        Returns:
-            True if registration successful, False otherwise.
-        """
-        pass
-
-    @abstractmethod
-    def unregister(self, hotkey: str) -> bool:
-        """
-        Unregister a previously registered hotkey.
-
-        Args:
-            hotkey: The hotkey string to unregister.
-
-        Returns:
-            True if unregistration successful, False otherwise.
-        """
-        pass
-
-    @abstractmethod
-    def start(self) -> None:
-        """
-        Start listening for hotkey events.
-        """
-        pass
-
-    @abstractmethod
-    def stop(self) -> None:
-        """
-        Stop listening for hotkey events.
-        """
-        pass
-
-    @abstractmethod
-    def is_registered(self, hotkey: str) -> bool:
-        """
-        Check if a hotkey is currently registered.
-
-        Args:
-            hotkey: The hotkey string to check.
-
-        Returns:
-            True if registered, False otherwise.
-        """
-        pass
-
 
 class PlatformManager:
     """
@@ -186,17 +118,3 @@ class PlatformManager:
         elif platform == 'linux':
             from .linux import LinuxClipboardManager
             return LinuxClipboardManager()
-
-    @classmethod
-    def get_hotkey_manager(cls) -> BaseHotkeyManager:
-        """Get the platform-specific hotkey manager implementation."""
-        platform = cls.get_platform()
-        if platform == 'macos':
-            from .macos import MacOSHotkeyManager
-            return MacOSHotkeyManager()
-        elif platform == 'windows':
-            from .windows import WindowsHotkeyManager
-            return WindowsHotkeyManager()
-        elif platform == 'linux':
-            from .linux import LinuxHotkeyManager
-            return LinuxHotkeyManager()

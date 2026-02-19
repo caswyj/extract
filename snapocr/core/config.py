@@ -14,8 +14,6 @@ class Config:
     DEFAULT_CONFIG: Dict[str, Any] = {
         "hotkey": "ctrl+shift+o",
         "language": "eng+chi_sim",
-        "auto_paste": True,
-        "paste_delay_ms": 500,
         "latex_conversion": False,
         "tesseract_path": None,
         "show_notification": True,
@@ -136,26 +134,6 @@ class Config:
     def language(self, value: str) -> None:
         """Set the OCR language."""
         self.set('language', value)
-
-    @property
-    def auto_paste(self) -> bool:
-        """Get the auto-paste setting."""
-        return self._config.get('auto_paste', self.DEFAULT_CONFIG['auto_paste'])
-
-    @auto_paste.setter
-    def auto_paste(self, value: bool) -> None:
-        """Set the auto-paste setting."""
-        self.set('auto_paste', value)
-
-    @property
-    def paste_delay_ms(self) -> int:
-        """Get the paste delay in milliseconds."""
-        return self._config.get('paste_delay_ms', self.DEFAULT_CONFIG['paste_delay_ms'])
-
-    @paste_delay_ms.setter
-    def paste_delay_ms(self, value: int) -> None:
-        """Set the paste delay."""
-        self.set('paste_delay_ms', value)
 
     @property
     def latex_conversion(self) -> bool:

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleDisplayName</key>
+    <string>SnapOCR</string>
+    <key>CFBundleExecutable</key>
+    <string>SnapOCR</string>
+    <key>CFBundleIconFile</key>
+    <string>SnapOCR</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.snapocr.app</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>SnapOCR</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>2.0.0</string>
+    <key>CFBundleVersion</key>
+    <string>200</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>10.15</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSHumanReadableCopyright</key>
+    <string>Copyright 2024 SnapOCR. All rights reserved.</string>
+    <key>NSMainNibFile</key>
+    <string></string>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <key>NSScreenCaptureUsageDescription</key>
+    <string>SnapOCR needs screen capture access to perform OCR on selected screen regions.</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>SnapOCR uses Apple Events for screen capture functionality.</string>
+</dict>
+</plist>

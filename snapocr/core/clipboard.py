@@ -1,8 +1,7 @@
 """
-Cross-platform clipboard management with auto-paste support.
+Cross-platform clipboard management.
 """
 
-import time
 from typing import Optional
 
 try:
@@ -10,27 +9,14 @@ try:
 except ImportError:
     pyperclip = None
 
-try:
-    import pyautogui
-except ImportError:
-    pyautogui = None
-
 
 class ClipboardManager:
     """
-    Cross-platform clipboard manager with auto-paste functionality.
+    Cross-platform clipboard manager.
     """
 
-    def __init__(self, auto_paste: bool = False, paste_delay_ms: int = 500):
-        """
-        Initialize clipboard manager.
-
-        Args:
-            auto_paste: Whether to automatically paste after copying.
-            paste_delay_ms: Delay in milliseconds before auto-paste.
-        """
-        self._auto_paste = auto_paste
-        self._paste_delay_ms = paste_delay_ms
+    def __init__(self):
+        """Initialize clipboard manager."""
         self._platform_clipboard = None
 
     def _get_platform_clipboard(self):
@@ -100,76 +86,3 @@ class ClipboardManager:
                 return clipboard.paste()
             except Exception:
                 return ""
-
-    def simulate_paste(self) -> bool:
-        """
-        Simulate paste keyboard shortcut (Ctrl+V or Cmd+V).
-
-        Returns:
-            True if successful, False otherwise.
-        """
-        if pyautogui is None:
-            print("Error: pyautogui not installed. Auto-paste unavailable.")
-            return False
-
-        try:
-            import platform
-            system = platform.system().lower()
-
-            if system == 'darwin':
-                # macOS: Cmd+V
-                pyautogui.hotkey('command', 'v')
-            else:
-                # Windows/Linux: Ctrl+V
-                pyautogui.hotkey('ctrl', 'v')
-
-            return True
-        except Exception as e:
-            print(f"Error simulating paste: {e}")
-            return False
-
-    def copy_and_paste(self, text: str, delay_ms: Optional[int] = None) -> bool:
-        """
-        Copy text to clipboard and optionally auto-paste.
-
-        Args:
-            text: Text to copy.
-            delay_ms: Optional override for paste delay.
-
-        Returns:
-            True if copy successful (paste is best-effort).
-        """
-        # Copy to clipboard
-        if not self.copy(text):
-            return False
-
-        # Auto-paste if enabled
-        should_paste = self._auto_paste
-        paste_delay = delay_ms if delay_ms is not None else self._paste_delay_ms
-
-        if should_paste:
-            # Small delay to ensure clipboard is updated
-            time.sleep(paste_delay / 1000.0)
-            self.simulate_paste()
-
-        return True
-
-    @property
-    def auto_paste(self) -> bool:
-        """Get auto-paste setting."""
-        return self._auto_paste
-
-    @auto_paste.setter
-    def auto_paste(self, value: bool) -> None:
-        """Set auto-paste setting."""
-        self._auto_paste = value
-
-    @property
-    def paste_delay_ms(self) -> int:
-        """Get paste delay in milliseconds."""
-        return self._paste_delay_ms
-
-    @paste_delay_ms.setter
-    def paste_delay_ms(self, value: int) -> None:
-        """Set paste delay in milliseconds."""
-        self._paste_delay_ms = value

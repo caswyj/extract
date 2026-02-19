@@ -13,8 +13,6 @@ from .core.config import Config
 from .core.ocr import extract_text, format_result
 from .core.clipboard import ClipboardManager
 from .platform.base import PlatformManager
-from .hotkey.manager import HotkeyManager
-from .hotkey.setup_wizard import run_setup_wizard
 
 
 class SnapOCR:
@@ -29,11 +27,7 @@ class SnapOCR:
         """
         self._config = config or Config()
         self._screenshot_capture = PlatformManager.get_screenshot_capture()
-        self._clipboard_manager = ClipboardManager(
-            auto_paste=self._config.auto_paste,
-            paste_delay_ms=self._config.paste_delay_ms
-        )
-        self._hotkey_manager: Optional[HotkeyManager] = None
+        self._clipboard_manager = ClipboardManager()
 
     def capture_and_extract(self, show_result: bool = True) -> Optional[str]:
         """
@@ -81,10 +75,6 @@ class SnapOCR:
                 print(preview)
                 print("-" * 40)
 
-            # Auto-paste if enabled
-            if self._config.auto_paste:
-                self._clipboard_manager.copy_and_paste(result)
-
             return result
 
         finally:
@@ -98,28 +88,6 @@ class SnapOCR:
     def run_once(self) -> Optional[str]:
         """Run a single capture and extraction."""
         return self.capture_and_extract()
-
-    def run_daemon(self) -> None:
-        """Run in daemon mode with hotkey listener."""
-        print(f"SnapOCR daemon started. Press {self._config.hotkey} to capture.")
-        print("Press Ctrl+C to exit.")
-
-        self._hotkey_manager = HotkeyManager()
-        self._hotkey_manager.register(
-            self._config.hotkey,
-            self.capture_and_extract
-        )
-        self._hotkey_manager.start()
-
-        try:
-            # Keep running
-            import time
-            while True:
-                time.sleep(1)
-        except KeyboardInterrupt:
-            print("\nShutting down...")
-        finally:
-            self._hotkey_manager.stop()
 
     @property
     def config(self) -> Config:
@@ -135,8 +103,6 @@ def main():
         epilog="""
 Examples:
   snapocr                    Capture region and extract text
-  snapocr --daemon           Run in background with hotkey listener
-  snapocr --setup-hotkey     Configure keyboard shortcut
   snapocr --latex            Enable LaTeX conversion for math
   snapocr --lang eng         Use English only OCR
 
@@ -145,24 +111,6 @@ Config file location:
   Windows: %APPDATA%/SnapOCR/config.json
   Linux:   ~/.config/snapocr/config.json
         """
-    )
-
-    parser.add_argument(
-        '--daemon', '-d',
-        action='store_true',
-        help='Run in daemon mode with hotkey listener'
-    )
-
-    parser.add_argument(
-        '--setup-hotkey', '-s',
-        action='store_true',
-        help='Run the hotkey setup wizard'
-    )
-
-    parser.add_argument(
-        '--hotkey', '-k',
-        type=str,
-        help='Override hotkey (e.g., "ctrl+shift+o")'
     )
 
     parser.add_argument(
@@ -184,18 +132,6 @@ Config file location:
     )
 
     parser.add_argument(
-        '--auto-paste',
-        action='store_true',
-        help='Enable auto-paste after copying'
-    )
-
-    parser.add_argument(
-        '--no-auto-paste',
-        action='store_true',
-        help='Disable auto-paste'
-    )
-
-    parser.add_argument(
         '--config', '-c',
         type=str,
         help='Path to config file'
@@ -213,34 +149,18 @@ Config file location:
     config = Config(args.config) if args.config else Config()
 
     # Apply command line overrides
-    if args.hotkey:
-        config.hotkey = args.hotkey
     if args.lang:
         config.language = args.lang
     if args.latex:
         config.latex_conversion = True
     if args.no_latex:
         config.latex_conversion = False
-    if args.auto_paste:
-        config.auto_paste = True
-    if args.no_auto_paste:
-        config.auto_paste = False
 
-    # Handle setup wizard
-    if args.setup_hotkey:
-        run_setup_wizard(config)
-        return 0
-
-    # Create app instance
+    # Create app instance and run
     app = SnapOCR(config)
-
-    # Run appropriate mode
-    if args.daemon:
-        app.run_daemon()
-    else:
-        result = app.run_once()
-        if result is None:
-            return 1
+    result = app.run_once()
+    if result is None:
+        return 1
 
     return 0
 

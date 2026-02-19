@@ -5,12 +5,11 @@ macOS platform-specific implementations.
 import os
 import subprocess
 import tempfile
-from typing import Optional, Callable
+from typing import Optional
 
 from .base import (
     BaseScreenshotCapture,
     BaseClipboardManager,
-    BaseHotkeyManager,
 )
 
 
@@ -124,116 +123,3 @@ class MacOSClipboardManager(BaseClipboardManager):
         except Exception as e:
             print(f"Error reading clipboard: {e}")
             return ""
-
-    def simulate_paste(self) -> bool:
-        """Simulate Cmd+V paste."""
-        try:
-            import pyautogui
-            pyautogui.hotkey('command', 'v')
-            return True
-        except Exception as e:
-            print(f"Error simulating paste: {e}")
-            return False
-
-
-class MacOSHotkeyManager(BaseHotkeyManager):
-    """macOS hotkey manager using pynput."""
-
-    def __init__(self):
-        """Initialize hotkey manager."""
-        self._hotkeys = {}
-        self._listener = None
-        self._running = False
-
-    def _normalize_hotkey(self, hotkey: str) -> str:
-        """Normalize hotkey string for pynput format."""
-        hotkey = hotkey.lower().strip()
-
-        # macOS-specific replacements
-        replacements = {
-            'ctrl': '<ctrl>',
-            'alt': '<alt>',
-            'shift': '<shift>',
-            'cmd': '<cmd>',
-            'command': '<cmd>',
-            'super': '<cmd>',
-            'win': '<cmd>',
-            'meta': '<cmd>',
-            'option': '<alt>',
-        }
-
-        parts = hotkey.replace(' ', '').split('+')
-        normalized_parts = []
-
-        for part in parts:
-            if part in replacements:
-                normalized_parts.append(replacements[part])
-            elif len(part) == 1:
-                normalized_parts.append(part)
-            else:
-                normalized_parts.append(f'<{part}>')
-
-        return '+'.join(normalized_parts)
-
-    def register(self, hotkey: str, callback: Callable[[], None]) -> bool:
-        """Register a global hotkey."""
-        try:
-            normalized = self._normalize_hotkey(hotkey)
-            self._hotkeys[normalized] = callback
-
-            # Restart listener if running
-            if self._running:
-                self.stop()
-                self.start()
-
-            return True
-        except Exception as e:
-            print(f"Error registering hotkey: {e}")
-            return False
-
-    def unregister(self, hotkey: str) -> bool:
-        """Unregister a hotkey."""
-        try:
-            normalized = self._normalize_hotkey(hotkey)
-            if normalized in self._hotkeys:
-                del self._hotkeys[normalized]
-
-                # Restart listener if running
-                if self._running:
-                    self.stop()
-                    self.start()
-
-            return True
-        except Exception as e:
-            print(f"Error unregistering hotkey: {e}")
-            return False
-
-    def start(self) -> None:
-        """Start listening for hotkeys."""
-        if self._running:
-            return
-
-        try:
-            from pynput import keyboard
-
-            # Create hotkey listeners
-            if self._hotkeys:
-                self._listener = keyboard.GlobalHotKeys(self._hotkeys)
-                self._listener.start()
-                self._running = True
-        except Exception as e:
-            print(f"Error starting hotkey listener: {e}")
-            print("Note: On macOS, you may need to grant Accessibility permissions.")
-            print("System Preferences > Security & Privacy > Privacy > Accessibility")
-
-    def stop(self) -> None:
-        """Stop listening for hotkeys."""
-        if self._listener:
-            self._listener.stop()
-            self._listener = None
-        self._running = False
-
-    def is_registered(self, hotkey: str) -> bool:
-        """Check if hotkey is registered."""
-        normalized = self._normalize_hotkey(hotkey)
-        return normalized in self._hotkeys

@@ -20,7 +20,6 @@ from .core.config import Config
 from .core.ocr import extract_text, format_result
 from .core.clipboard import ClipboardManager
 from .platform.base import PlatformManager
-from .hotkey.manager import HotkeyManager
 
 __all__ = [
     'SnapOCR',
@@ -29,6 +28,5 @@ __all__ = [
     'format_result',
     'ClipboardManager',
     'PlatformManager',
-    'HotkeyManager',
     'main',
 ]

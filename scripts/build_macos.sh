@@ -32,8 +32,6 @@ python3 -m PyInstaller \
     --onedir \
     --hidden-import "PIL._tkinter_finder" \
     --hidden-import "pytesseract" \
-    --hidden-import "pynput" \
-    --hidden-import "pyautogui" \
     --hidden-import "mss" \
     --hidden-import "snapocr" \
     --hidden-import "snapocr.main" \
@@ -42,10 +40,15 @@ python3 -m PyInstaller \
     --hidden-import "snapocr.core.clipboard" \
     --hidden-import "snapocr.platform.base" \
     --hidden-import "snapocr.platform.macos" \
-    --hidden-import "snapocr.hotkey.manager" \
+    --hidden-import "snapocr.platform.macos_native" \
     --add-data "snapocr:snapocr" \
     --osx-bundle-identifier "com.snapocr.app" \
+    --target-arch arm64 \
     run.py
+
+# Copy custom Info.plist
+echo "Copying custom Info.plist..."
+cp resources/Info.plist dist/SnapOCR.app/Contents/Info.plist
 
 echo ""
 echo "Build complete!"
