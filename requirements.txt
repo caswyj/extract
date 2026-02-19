@@ -12,7 +12,7 @@ pyobjc-framework-Quartz>=10.0; sys_platform == 'darwin'
 pyobjc-framework-Cocoa>=10.0; sys_platform == 'darwin'
 
 # LaTeX OCR - UniMERNet (best accuracy for math formulas)
-unimernet-small>=0.1.0
+unimernet>=0.1.0
 torch>=2.0.0
 torchvision>=0.15.0
 transformers>=4.30.0
