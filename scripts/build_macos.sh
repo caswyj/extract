@@ -5,10 +5,22 @@ set -e
 
 echo "Building SnapOCR for macOS..."
 
+# Find the correct pip command
+if command -v pip3 &> /dev/null; then
+    PIP_CMD="pip3"
+elif command -v pip &> /dev/null; then
+    PIP_CMD="pip"
+else
+    echo "Error: pip not found. Please install Python first."
+    exit 1
+fi
+
+echo "Using: $PIP_CMD"
+
 # Check for PyInstaller
-if ! command -v pyinstaller &> /dev/null; then
+if ! python3 -c "import PyInstaller" 2>/dev/null; then
     echo "PyInstaller not found. Installing..."
-    pip install pyinstaller
+    $PIP_CMD install pyinstaller
 fi
 
 # Create .app bundle

@@ -3,11 +3,24 @@
 
 Write-Host "Building SnapOCR for Windows..."
 
+# Find the correct pip command
+$pipCmd = $null
+if (Get-Command pip3 -ErrorAction SilentlyContinue) {
+    $pipCmd = "pip3"
+} elseif (Get-Command pip -ErrorAction SilentlyContinue) {
+    $pipCmd = "pip"
+} else {
+    Write-Host "Error: pip not found. Please install Python first."
+    exit 1
+}
+
+Write-Host "Using: $pipCmd"
+
 # Check for PyInstaller
 $pyinstaller = Get-Command pyinstaller -ErrorAction SilentlyContinue
 if (-not $pyinstaller) {
     Write-Host "PyInstaller not found. Installing..."
-    pip install pyinstaller
+    & $pipCmd install pyinstaller
 }
 
 # Create executable
