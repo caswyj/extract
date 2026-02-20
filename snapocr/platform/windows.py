@@ -9,6 +9,7 @@ from typing import Optional
 from .base import (
     BaseScreenshotCapture,
     BaseClipboardManager,
+    SelectionResult,
 )
 
 
@@ -38,12 +39,12 @@ class WindowsScreenshotCapture(BaseScreenshotCapture):
         except Exception:
             return 1.0
 
-    def select_region(self) -> Optional[str]:
+    def select_region(self) -> Optional[SelectionResult]:
         """
         Capture a selected screen region using mss with tkinter overlay.
 
         Returns:
-            Path to captured image or None if cancelled.
+            SelectionResult with image path and region info, or None if cancelled.
         """
         try:
             import mss
@@ -66,8 +67,19 @@ class WindowsScreenshotCapture(BaseScreenshotCapture):
             except Exception:
                 pass
 
+        # Capture full screen first for overlay
+        try:
+            with mss.mss() as sct:
+                monitor = sct.monitors[0]  # All monitors combined
+                screenshot = sct.grab(monitor)
+                screen_img = Image.frombytes('RGB', screenshot.size, screenshot.rgb)
+                screen_width, screen_height = screenshot.size
+        except Exception as e:
+            print(f"Error capturing screen: {e}")
+            return None
+
         # Selection state
-        selection = {'start': None, 'end': None, 'done': False}
+        selection = {'start': None, 'end': None, 'done': False, 'cancelled': False}
 
         def on_press(event):
             selection['start'] = (event.x_root, event.y_root)
@@ -85,10 +97,11 @@ class WindowsScreenshotCapture(BaseScreenshotCapture):
                 x2, y2 = event.x_root, event.y_root
                 canvas.create_rectangle(
                     x1, y1, x2, y2,
-                    outline='red', width=2, tag="selection"
+                    outline='#00BFFF', width=2, tag="selection"
                 )
 
         def on_escape(event):
+            selection['cancelled'] = True
             root.destroy()
 
         # Create fullscreen transparent window
@@ -105,12 +118,13 @@ class WindowsScreenshotCapture(BaseScreenshotCapture):
         canvas.bind('<ButtonRelease-1>', on_release)
         canvas.bind('<B1-Motion>', on_motion)
         canvas.bind('<Escape>', on_escape)
+        root.bind('<Escape>', on_escape)
 
         print("Select a region with your mouse (drag to select, Esc to cancel)...")
 
         root.mainloop()
 
-        if not selection['done'] or not selection['start'] or not selection['end']:
+        if selection['cancelled'] or not selection['done'] or not selection['start'] or not selection['end']:
             return None
 
         # Calculate region bounds (coordinates from tkinter should be in physical pixels)
@@ -124,18 +138,25 @@ class WindowsScreenshotCapture(BaseScreenshotCapture):
         if right - left < 5 or bottom - top < 5:
             return None
 
-        # Capture the region
+        width = right - left
+        height = bottom - top
+
+        # Crop the selected region from the full screen capture
         temp_path = self._get_temp_path()
         try:
-            with mss.mss() as sct:
-                monitor = {'left': left, 'top': top, 'width': right - left, 'height': bottom - top}
-                screenshot = sct.grab(monitor)
-                img = Image.frombytes('RGB', screenshot.size, screenshot.rgb)
-                img.save(temp_path)
-            return temp_path
+            region_img = screen_img.crop((left, top, right, bottom))
+            region_img.save(temp_path)
         except Exception as e:
-            print(f"Error capturing region: {e}")
+            print(f"Error saving selection: {e}")
             return None
+
+        return SelectionResult(
+            image_path=temp_path,
+            rect=(left, top, width, height),
+            screen_image=screen_img,
+            screen_width=screen_width,
+            screen_height=screen_height
+        )
 
     def capture_full_screen(self) -> Optional[str]:
         """Capture the full screen."""

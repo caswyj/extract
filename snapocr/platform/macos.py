@@ -10,11 +10,12 @@ from typing import Optional
 from .base import (
     BaseScreenshotCapture,
     BaseClipboardManager,
+    SelectionResult,
 )
 
 
 class MacOSScreenshotCapture(BaseScreenshotCapture):
-    """macOS screenshot capture using built-in screencapture command."""
+    """macOS screenshot capture using mss with tkinter selection overlay."""
 
     def __init__(self):
         """Initialize macOS screenshot capture."""
@@ -24,37 +25,111 @@ class MacOSScreenshotCapture(BaseScreenshotCapture):
         """Get a temporary file path for screenshot."""
         return os.path.join(self._temp_dir, 'snapocr_temp.png')
 
-    def select_region(self) -> Optional[str]:
+    def select_region(self) -> Optional[SelectionResult]:
         """
-        Capture a selected screen region using screencapture.
+        Capture a selected screen region using mss with tkinter overlay.
 
         Returns:
-            Path to captured image or None if cancelled.
+            SelectionResult with image path and region info, or None if cancelled.
         """
-        temp_path = self._get_temp_path()
+        try:
+            import mss
+            import tkinter as tk
+            from PIL import Image
+        except ImportError:
+            print("Error: mss, tkinter, and Pillow required for region selection")
+            return None
 
-        # Remove existing temp file
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
+        # Capture full screen first for overlay
+        try:
+            with mss.mss() as sct:
+                monitor = sct.monitors[0]  # All monitors combined
+                screenshot = sct.grab(monitor)
+                screen_img = Image.frombytes('RGB', screenshot.size, screenshot.rgb)
+                screen_width, screen_height = screenshot.size
+        except Exception as e:
+            print(f"Error capturing screen: {e}")
+            return None
+
+        # Selection state
+        selection = {'start': None, 'end': None, 'done': False, 'cancelled': False}
+
+        def on_press(event):
+            selection['start'] = (event.x, event.y)
+
+        def on_release(event):
+            selection['end'] = (event.x, event.y)
+            selection['done'] = True
+            root.destroy()
+
+        def on_motion(event):
+            if selection['start']:
+                # Update selection rectangle
+                canvas.delete("selection")
+                x1, y1 = selection['start']
+                x2, y2 = event.x, event.y
+                canvas.create_rectangle(
+                    x1, y1, x2, y2,
+                    outline='#00BFFF', width=2, tag="selection"
+                )
+
+        def on_escape(event):
+            selection['cancelled'] = True
+            root.destroy()
+
+        # Create fullscreen transparent window
+        root = tk.Tk()
+        root.attributes('-fullscreen', True)
+        root.attributes('-alpha', 0.3)
+        root.attributes('-topmost', True)
+        root.configure(bg='black', cursor='cross')
+
+        canvas = tk.Canvas(root, bg='black', highlightthickness=0)
+        canvas.pack(fill=tk.BOTH, expand=True)
+
+        canvas.bind('<ButtonPress-1>', on_press)
+        canvas.bind('<ButtonRelease-1>', on_release)
+        canvas.bind('<B1-Motion>', on_motion)
+        canvas.bind('<Escape>', on_escape)
+        root.bind('<Escape>', on_escape)
 
         print("Select a region with your mouse (drag to select, Esc to cancel)...")
 
-        # Use macOS screencapture command
-        # -i: interactive mode (user selects region)
-        # -r: don't play sound
-        # -x: don't play sound (alternative flag)
-        result = subprocess.run(
-            ['screencapture', '-i', '-r', temp_path],
-            capture_output=True
-        )
+        root.mainloop()
 
-        # screencapture returns 0 on success, non-zero if cancelled
-        if result.returncode != 0:
+        if selection['cancelled'] or not selection['done'] or not selection['start'] or not selection['end']:
             return None
 
-        if os.path.exists(temp_path):
-            return temp_path
-        return None
+        # Calculate region bounds
+        x1, y1 = selection['start']
+        x2, y2 = selection['end']
+        left = int(min(x1, x2))
+        top = int(min(y1, y2))
+        right = int(max(x1, x2))
+        bottom = int(max(y1, y2))
+
+        if right - left < 5 or bottom - top < 5:
+            return None
+
+        width = right - left
+        height = bottom - top
+
+        # Crop the selected region from the full screen capture
+        temp_path = self._get_temp_path()
+        try:
+            region_img = screen_img.crop((left, top, right, bottom))
+            region_img.save(temp_path)
+        except Exception as e:
+            print(f"Error saving selection: {e}")
+            return None
+
+        return SelectionResult(
+            image_path=temp_path,
+            rect=(left, top, width, height),
+            screen_image=screen_img,
+            screen_width=screen_width,
+            screen_height=screen_height
+        )
 
     def capture_full_screen(self) -> Optional[str]:
         """Capture the full screen."""
@@ -63,15 +138,20 @@ class MacOSScreenshotCapture(BaseScreenshotCapture):
         if os.path.exists(temp_path):
             os.remove(temp_path)
 
-        # -x: don't play sound
-        result = subprocess.run(
-            ['screencapture', '-x', temp_path],
-            capture_output=True
-        )
+        # Use mss for consistency
+        try:
+            import mss
+            from PIL import Image
 
-        if result.returncode == 0 and os.path.exists(temp_path):
+            with mss.mss() as sct:
+                monitor = sct.monitors[0]  # All monitors
+                screenshot = sct.grab(monitor)
+                img = Image.frombytes('RGB', screenshot.size, screenshot.rgb)
+                img.save(temp_path)
             return temp_path
-        return None
+        except Exception as e:
+            print(f"Error capturing screen: {e}")
+            return None
 
     def capture_window(self) -> Optional[str]:
         """Capture the currently focused window."""
@@ -80,9 +160,7 @@ class MacOSScreenshotCapture(BaseScreenshotCapture):
         if os.path.exists(temp_path):
             os.remove(temp_path)
 
-        # -l: capture window by ID (0 for focused window doesn't work, need to get window ID)
-        # -o: capture window only (no shadow)
-        # -w: select window interactively
+        # Use screencapture for window selection on macOS
         result = subprocess.run(
             ['screencapture', '-o', '-w', '-x', temp_path],
             capture_output=True

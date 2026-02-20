@@ -3,19 +3,31 @@ Abstract base classes for platform-specific implementations.
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional
+from dataclasses import dataclass
+from typing import Optional, Tuple, Any
+
+
+@dataclass
+class SelectionResult:
+    """Result of a screen region selection."""
+
+    image_path: str                              # Path to the captured image file
+    rect: Tuple[int, int, int, int]              # (x, y, width, height) of selection
+    screen_image: Optional[Any] = None           # PIL Image of full screen (for overlay)
+    screen_width: int = 0                        # Full screen width
+    screen_height: int = 0                       # Full screen height
 
 
 class BaseScreenshotCapture(ABC):
     """Abstract base class for screenshot capture functionality."""
 
     @abstractmethod
-    def select_region(self) -> Optional[str]:
+    def select_region(self) -> Optional[SelectionResult]:
         """
         Allow user to select a screen region and capture it.
 
         Returns:
-            Path to the captured image file, or None if cancelled.
+            SelectionResult with image path and region info, or None if cancelled.
         """
         pass
 

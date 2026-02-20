@@ -70,6 +70,11 @@ jobs:
             --hidden-import "snapocr.platform.base" \
             --hidden-import "snapocr.platform.macos" \
             --hidden-import "snapocr.platform.macos_native" \
+            --hidden-import "snapocr.ui" \
+            --hidden-import "snapocr.ui.selection_overlay" \
+            --hidden-import "snapocr.ui.result_panel" \
+            --hidden-import "snapocr.ui.button_bar" \
+            --hidden-import "snapocr.ui.pinned_window" \
             --hidden-import "rapid_latex_ocr" \
             --add-data "snapocr:snapocr" \
             --add-data "tesseract:tesseract" \
@@ -150,6 +155,11 @@ jobs:
             --hidden-import "snapocr.core.clipboard" `
             --hidden-import "snapocr.platform.base" `
             --hidden-import "snapocr.platform.windows" `
+            --hidden-import "snapocr.ui" `
+            --hidden-import "snapocr.ui.selection_overlay" `
+            --hidden-import "snapocr.ui.result_panel" `
+            --hidden-import "snapocr.ui.button_bar" `
+            --hidden-import "snapocr.ui.pinned_window" `
             --hidden-import "rapid_latex_ocr" `
             --add-data "snapocr;snapocr" `
             --add-data "tesseract;tesseract" `
@@ -211,6 +221,11 @@ jobs:
             --hidden-import "snapocr.core.clipboard" \
             --hidden-import "snapocr.platform.base" \
             --hidden-import "snapocr.platform.linux" \
+            --hidden-import "snapocr.ui" \
+            --hidden-import "snapocr.ui.selection_overlay" \
+            --hidden-import "snapocr.ui.result_panel" \
+            --hidden-import "snapocr.ui.button_bar" \
+            --hidden-import "snapocr.ui.pinned_window" \
             --hidden-import "rapid_latex_ocr" \
             --add-data "snapocr:snapocr" \
             --add-data "tesseract:tesseract" \
@@ -271,10 +286,27 @@ jobs:
             - **Linux**: `SnapOCR`
 
             ### Features
+            - **Interactive UI Mode**: Use `--ui` flag for Pin/Accept/Cancel buttons
+              - Pin: Create floating window with screenshot
+              - Accept: Copy OCR text to clipboard
+              - Cancel: Close without action
+            - **Region Selection**: Full-screen dimmed overlay with highlighted selection
             - Tesseract OCR bundled - no external installation required
             - RapidLatexOCR for math formula recognition
             - Supports English and Chinese (Simplified) OCR
             - Copy recognized text to clipboard with one click
+
+            ### Usage
+            ```bash
+            # Basic mode (copy to clipboard directly)
+            ./SnapOCR
+
+            # Interactive UI mode
+            ./SnapOCR --ui
+
+            # With LaTeX math formula support
+            ./SnapOCR --ui --latex
+            ```
 
             ### System Requirements
             - **macOS**: macOS 11.0+ (Apple Silicon)

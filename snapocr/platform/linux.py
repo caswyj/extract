@@ -10,11 +10,12 @@ from typing import Optional
 from .base import (
     BaseScreenshotCapture,
     BaseClipboardManager,
+    SelectionResult,
 )
 
 
 class LinuxScreenshotCapture(BaseScreenshotCapture):
-    """Linux screenshot capture using scrot or ImageMagick import."""
+    """Linux screenshot capture using mss with tkinter selection overlay."""
 
     def __init__(self):
         """Initialize and detect available screenshot tool."""
@@ -23,7 +24,14 @@ class LinuxScreenshotCapture(BaseScreenshotCapture):
 
     def _detect_capture_tool(self) -> Optional[str]:
         """Detect available screenshot tool."""
-        # Prefer scrot for its selection mode
+        # Prefer mss for consistent behavior across platforms
+        try:
+            import mss
+            return 'mss'
+        except ImportError:
+            pass
+
+        # Fall back to scrot for its selection mode
         result = subprocess.run(['which', 'scrot'], capture_output=True)
         if result.returncode == 0:
             return 'scrot'
@@ -33,66 +41,50 @@ class LinuxScreenshotCapture(BaseScreenshotCapture):
         if result.returncode == 0:
             return 'import'
 
-        # Use mss as Python-based fallback
-        return 'mss'
+        return None
 
     def _get_temp_path(self) -> str:
         """Get a temporary file path for screenshot."""
         return os.path.join(self._temp_dir, 'snapocr_temp.png')
 
-    def select_region(self) -> Optional[str]:
+    def select_region(self) -> Optional[SelectionResult]:
         """
-        Capture a selected screen region.
+        Capture a selected screen region using mss with tkinter overlay.
 
         Returns:
-            Path to captured image or None if cancelled.
+            SelectionResult with image path and region info, or None if cancelled.
         """
-        temp_path = self._get_temp_path()
+        # Prefer mss with tkinter overlay for consistent behavior
+        return self._capture_with_mss_selection()
 
-        # Remove existing temp file
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
-
-        print("Select a region with your mouse (drag to select, Esc to cancel)...")
-
-        if self._capture_tool == 'scrot':
-            # scrot -s: selection mode, -z: silent (no output)
-            result = subprocess.run(
-                ['scrot', '-s', '-z', temp_path],
-                capture_output=True
-            )
-            if result.returncode != 0:
-                return None
-
-        elif self._capture_tool == 'import':
-            # ImageMagick import with interactive selection
-            result = subprocess.run(
-                ['import', temp_path],
-                capture_output=True
-            )
-            if result.returncode != 0:
-                return None
-
-        else:
-            # Use mss with tkinter overlay for region selection
-            return self._capture_with_mss_selection()
-
-        if os.path.exists(temp_path):
-            return temp_path
-        return None
-
-    def _capture_with_mss_selection(self) -> Optional[str]:
+    def _capture_with_mss_selection(self) -> Optional[SelectionResult]:
         """Capture region using mss with tkinter selection overlay."""
         try:
             import mss
             import tkinter as tk
-            from PIL import ImageGrab
+            from PIL import Image
         except ImportError:
-            print("Error: mss and tkinter required for region selection")
+            print("Error: mss, tkinter, and Pillow required for region selection")
+            # Fall back to scrot or import if available
+            if self._capture_tool == 'scrot':
+                return self._capture_with_scrot()
+            elif self._capture_tool == 'import':
+                return self._capture_with_import()
+            return None
+
+        # Capture full screen first for overlay
+        try:
+            with mss.mss() as sct:
+                monitor = sct.monitors[0]  # All monitors combined
+                screenshot = sct.grab(monitor)
+                screen_img = Image.frombytes('RGB', screenshot.size, screenshot.rgb)
+                screen_width, screen_height = screenshot.size
+        except Exception as e:
+            print(f"Error capturing screen: {e}")
             return None
 
         # Selection state
-        selection = {'start': None, 'end': None, 'done': False}
+        selection = {'start': None, 'end': None, 'done': False, 'cancelled': False}
 
         def on_press(event):
             selection['start'] = (event.x_root, event.y_root)
@@ -110,15 +102,19 @@ class LinuxScreenshotCapture(BaseScreenshotCapture):
                 x2, y2 = event.x_root, event.y_root
                 canvas.create_rectangle(
                     x1, y1, x2, y2,
-                    outline='red', width=2, tag="selection"
+                    outline='#00BFFF', width=2, tag="selection"
                 )
+
+        def on_escape(event):
+            selection['cancelled'] = True
+            root.destroy()
 
         # Create fullscreen transparent window
         root = tk.Tk()
         root.attributes('-fullscreen', True)
         root.attributes('-alpha', 0.3)
         root.attributes('-topmost', True)
-        root.configure(bg='black')
+        root.configure(bg='black', cursor='cross')
 
         canvas = tk.Canvas(root, bg='black', highlightthickness=0)
         canvas.pack(fill=tk.BOTH, expand=True)
@@ -126,37 +122,123 @@ class LinuxScreenshotCapture(BaseScreenshotCapture):
         canvas.bind('<ButtonPress-1>', on_press)
         canvas.bind('<ButtonRelease-1>', on_release)
         canvas.bind('<B1-Motion>', on_motion)
-        canvas.bind('<Escape>', lambda e: root.destroy())
+        canvas.bind('<Escape>', on_escape)
+        root.bind('<Escape>', on_escape)
+
+        print("Select a region with your mouse (drag to select, Esc to cancel)...")
 
         root.mainloop()
 
-        if not selection['done'] or not selection['start'] or not selection['end']:
+        if selection['cancelled'] or not selection['done'] or not selection['start'] or not selection['end']:
             return None
 
         # Calculate region bounds
         x1, y1 = selection['start']
         x2, y2 = selection['end']
-        left = min(x1, x2)
-        top = min(y1, y2)
-        right = max(x1, x2)
-        bottom = max(y1, y2)
+        left = int(min(x1, x2))
+        top = int(min(y1, y2))
+        right = int(max(x1, x2))
+        bottom = int(max(y1, y2))
 
         if right - left < 5 or bottom - top < 5:
             return None
 
-        # Capture the region
+        width = right - left
+        height = bottom - top
+
+        # Crop the selected region from the full screen capture
         temp_path = self._get_temp_path()
         try:
-            with mss.mss() as sct:
-                monitor = {'left': left, 'top': top, 'width': right - left, 'height': bottom - top}
-                screenshot = sct.grab(monitor)
-                from PIL import Image
-                img = Image.frombytes('RGB', screenshot.size, screenshot.rgb)
-                img.save(temp_path)
-            return temp_path
+            region_img = screen_img.crop((left, top, right, bottom))
+            region_img.save(temp_path)
         except Exception as e:
-            print(f"Error capturing region: {e}")
+            print(f"Error saving selection: {e}")
             return None
+
+        return SelectionResult(
+            image_path=temp_path,
+            rect=(left, top, width, height),
+            screen_image=screen_img,
+            screen_width=screen_width,
+            screen_height=screen_height
+        )
+
+    def _capture_with_scrot(self) -> Optional[SelectionResult]:
+        """Capture region using scrot (fallback)."""
+        temp_path = self._get_temp_path()
+
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+        # scrot -s: selection mode, -z: silent
+        result = subprocess.run(
+            ['scrot', '-s', '-z', temp_path],
+            capture_output=True
+        )
+
+        if result.returncode != 0:
+            return None
+
+        if os.path.exists(temp_path):
+            # scrot doesn't give us rect info easily, so we need to read the image
+            try:
+                from PIL import Image
+                img = Image.open(temp_path)
+                width, height = img.size
+                return SelectionResult(
+                    image_path=temp_path,
+                    rect=(0, 0, width, height),
+                    screen_image=None,
+                    screen_width=0,
+                    screen_height=0
+                )
+            except Exception:
+                return SelectionResult(
+                    image_path=temp_path,
+                    rect=(0, 0, 0, 0),
+                    screen_image=None,
+                    screen_width=0,
+                    screen_height=0
+                )
+        return None
+
+    def _capture_with_import(self) -> Optional[SelectionResult]:
+        """Capture region using ImageMagick import (fallback)."""
+        temp_path = self._get_temp_path()
+
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+        # ImageMagick import with interactive selection
+        result = subprocess.run(
+            ['import', temp_path],
+            capture_output=True
+        )
+
+        if result.returncode != 0:
+            return None
+
+        if os.path.exists(temp_path):
+            try:
+                from PIL import Image
+                img = Image.open(temp_path)
+                width, height = img.size
+                return SelectionResult(
+                    image_path=temp_path,
+                    rect=(0, 0, width, height),
+                    screen_image=None,
+                    screen_width=0,
+                    screen_height=0
+                )
+            except Exception:
+                return SelectionResult(
+                    image_path=temp_path,
+                    rect=(0, 0, 0, 0),
+                    screen_image=None,
+                    screen_width=0,
+                    screen_height=0
+                )
+        return None
 
     def capture_full_screen(self) -> Optional[str]:
         """Capture the full screen."""
@@ -165,7 +247,20 @@ class LinuxScreenshotCapture(BaseScreenshotCapture):
         if os.path.exists(temp_path):
             os.remove(temp_path)
 
-        if self._capture_tool == 'scrot':
+        if self._capture_tool == 'mss':
+            try:
+                import mss
+                from PIL import Image
+                with mss.mss() as sct:
+                    monitor = sct.monitors[0]  # All monitors
+                    screenshot = sct.grab(monitor)
+                    img = Image.frombytes('RGB', screenshot.size, screenshot.rgb)
+                    img.save(temp_path)
+                return temp_path
+            except Exception as e:
+                print(f"Error capturing screen: {e}")
+                return None
+        elif self._capture_tool == 'scrot':
             result = subprocess.run(
                 ['scrot', '-z', temp_path],
                 capture_output=True
@@ -176,20 +271,10 @@ class LinuxScreenshotCapture(BaseScreenshotCapture):
                 capture_output=True
             )
         else:
-            try:
-                import mss
-                with mss.mss() as sct:
-                    monitor = sct.monitors[1]  # Primary monitor
-                    screenshot = sct.grab(monitor)
-                    from PIL import Image
-                    img = Image.frombytes('RGB', screenshot.size, screenshot.rgb)
-                    img.save(temp_path)
-                result = subprocess.CompletedProcess(args=[], returncode=0)
-            except Exception as e:
-                print(f"Error capturing screen: {e}")
-                return None
+            print("No screenshot tool available")
+            return None
 
-        if result.returncode == 0 and os.path.exists(temp_path):
+        if os.path.exists(temp_path):
             return temp_path
         return None
 
@@ -217,7 +302,7 @@ class LinuxScreenshotCapture(BaseScreenshotCapture):
             print("Window capture not supported. Use full screen or region selection.")
             return None
 
-        if result.returncode == 0 and os.path.exists(temp_path):
+        if os.path.exists(temp_path):
             return temp_path
         return None
 
