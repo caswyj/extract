@@ -13,7 +13,7 @@ class Config:
 
     DEFAULT_CONFIG: Dict[str, Any] = {
         "hotkey": "ctrl+shift+o",
-        "language": "eng+chi_sim",
+        "language": "chi_sim+eng",
         "latex_conversion": False,
         "tesseract_path": None,
         "show_notification": True,

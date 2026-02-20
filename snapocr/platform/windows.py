@@ -23,6 +23,21 @@ class WindowsScreenshotCapture(BaseScreenshotCapture):
         """Get a temporary file path for screenshot."""
         return os.path.join(self._temp_dir, 'snapocr_temp.png')
 
+    def _get_dpi_scale(self):
+        """Get the DPI scaling factor for the primary monitor."""
+        try:
+            import ctypes
+            # Get the DPI for the primary monitor
+            user32 = ctypes.windll.user32
+            dc = user32.GetDC(0)
+            LOGPIXELSX = 88
+            dpi = ctypes.windll.gdi32.GetDeviceCaps(dc, LOGPIXELSX)
+            user32.ReleaseDC(0, dc)
+            # Standard DPI is 96, scale factor is dpi/96
+            return dpi / 96.0
+        except Exception:
+            return 1.0
+
     def select_region(self) -> Optional[str]:
         """
         Capture a selected screen region using mss with tkinter overlay.
@@ -34,9 +49,22 @@ class WindowsScreenshotCapture(BaseScreenshotCapture):
             import mss
             import tkinter as tk
             from PIL import Image
+            import ctypes
         except ImportError:
             print("Error: mss, tkinter, and Pillow required for region selection")
             return None
+
+        # Get DPI scaling factor
+        dpi_scale = self._get_dpi_scale()
+
+        # Make the process DPI aware to get correct coordinates
+        try:
+            ctypes.windll.shcore.SetProcessDpiAwareness(2)  # PROCESS_PER_MONITOR_DPI_AWARE
+        except Exception:
+            try:
+                ctypes.windll.user32.SetProcessDPIAware()
+            except Exception:
+                pass
 
         # Selection state
         selection = {'start': None, 'end': None, 'done': False}
@@ -85,13 +113,13 @@ class WindowsScreenshotCapture(BaseScreenshotCapture):
         if not selection['done'] or not selection['start'] or not selection['end']:
             return None
 
-        # Calculate region bounds
+        # Calculate region bounds (coordinates from tkinter should be in physical pixels)
         x1, y1 = selection['start']
         x2, y2 = selection['end']
-        left = min(x1, x2)
-        top = min(y1, y2)
-        right = max(x1, x2)
-        bottom = max(y1, y2)
+        left = int(min(x1, x2))
+        top = int(min(y1, y2))
+        right = int(max(x1, x2))
+        bottom = int(max(y1, y2))
 
         if right - left < 5 or bottom - top < 5:
             return None
@@ -136,15 +164,17 @@ class WindowsScreenshotCapture(BaseScreenshotCapture):
             import mss
             from PIL import Image
             import ctypes
-            import win32gui
 
             # Get foreground window
-            hwnd = win32gui.GetForegroundWindow()
+            user32 = ctypes.windll.user32
+            hwnd = user32.GetForegroundWindow()
             if not hwnd:
                 return None
 
             # Get window rect
-            left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+            rect = ctypes.wintypes.RECT()
+            user32.GetWindowRect(hwnd, ctypes.byref(rect))
+            left, top, right, bottom = rect.left, rect.top, rect.right, rect.bottom
             width = right - left
             height = bottom - top
 
@@ -154,9 +184,6 @@ class WindowsScreenshotCapture(BaseScreenshotCapture):
                 img = Image.frombytes('RGB', screenshot.size, screenshot.rgb)
                 img.save(temp_path)
             return temp_path
-        except ImportError:
-            print("Error: win32gui required for window capture. Install with: pip install pywin32")
-            return None
         except Exception as e:
             print(f"Error capturing window: {e}")
             return None

@@ -82,9 +82,11 @@ def _get_latex_model():
     if _latex_model is None:
         try:
             from rapid_latex_ocr import LatexOCR
+            print("Loading LaTeX OCR model...")
             _latex_model = LatexOCR()
-        except ImportError:
-            print("Warning: rapid-latex-ocr not installed. LaTeX conversion unavailable.")
+            print("LaTeX OCR model loaded successfully")
+        except ImportError as e:
+            print(f"Warning: rapid-latex-ocr not installed: {e}")
             print("Install with: pip install rapid-latex-ocr")
             return None
         except Exception as e:
@@ -93,59 +95,50 @@ def _get_latex_model():
     return _latex_model
 
 
-def detect_math_content(text: str) -> bool:
+def detect_math_content(image: Image.Image) -> bool:
     """
-    Detect if text contains mathematical content.
-
-    Args:
-        text: The extracted text to analyze.
-
-    Returns:
-        True if mathematical content is detected.
-    """
-    math_patterns = [
-        r'[=+\-*/^]',
-        r'[∑∫∏∂∇]',
-        r'[α-ωΑ-Ω]',
-        r'[<>≤≥≠±×÷]',
-        r'\d+\s*[xy]\s*=',
-        r'[xy]\s*\^',
-        r'\\frac',
-        r'\\sqrt',
-        r'\\sum',
-        r'\\int',
-    ]
-
-    for pattern in math_patterns:
-        if re.search(pattern, text):
-            return True
-    return False
-
-
-def contains_math_symbols(image: Image.Image) -> bool:
-    """
-    Heuristic check if image likely contains mathematical formulas.
+    Detect if image contains mathematical content by analyzing the image.
 
     Args:
         image: PIL Image to analyze.
 
     Returns:
-        True if image likely contains math.
+        True if mathematical content is detected.
     """
     if pytesseract is None:
         return False
 
     try:
-        gray = image.convert('L')
-        text = pytesseract.image_to_string(gray, config='--psm 6')
-        return detect_math_content(text)
+        # Try to get text with basic config to detect math
+        text = pytesseract.image_to_string(image, config='--psm 6')
+
+        # Check for math patterns
+        math_patterns = [
+            r'[=+\-*/^]',
+            r'[∑∫∏∂∇]',
+            r'[α-ωΑ-Ω]',
+            r'[<>≤≥≠±×÷]',
+            r'\d+\s*[xy]\s*=',
+            r'[xy]\s*\^',
+            r'\d+\^',  # Powers like 2^3
+            r'\\frac',
+            r'\\sqrt',
+            r'\\sum',
+            r'\\int',
+            r'\d+\s*[+\-*/]\s*\d+',  # Simple equations
+        ]
+
+        for pattern in math_patterns:
+            if re.search(pattern, text):
+                return True
+        return False
     except Exception:
         return False
 
 
 def extract_text(
     image_path: str,
-    language: str = 'eng+chi_sim',
+    language: str = 'chi_sim+eng',
     tesseract_path: Optional[str] = None,
     latex_mode: bool = False,
     auto_detect_math: bool = True
@@ -155,7 +148,7 @@ def extract_text(
 
     Args:
         image_path: Path to the image file.
-        language: Tesseract language code(s), e.g., 'eng', 'chi_sim', 'eng+chi_sim'.
+        language: Tesseract language code(s), e.g., 'eng', 'chi_sim', 'chi_sim+eng'.
         tesseract_path: Optional path to Tesseract executable.
         latex_mode: Force LaTeX conversion for the entire image.
         auto_detect_math: Automatically detect and convert math regions.
@@ -172,24 +165,31 @@ def extract_text(
         pytesseract.pytesseract.tesseract_cmd = tesseract_path
 
     image = Image.open(image_path)
-    custom_config = r'--oem 3 --psm 6'
 
+    # Check available languages and select the best combination
     try:
         available_langs = pytesseract.get_languages()
-        requested_langs = language.split('+')
-        missing_langs = [lang for lang in requested_langs if lang not in available_langs]
+        print(f"Available languages: {available_langs}")
 
-        if missing_langs:
-            print(f"Warning: Language data not found: {missing_langs}")
-            print(f"Available languages: {available_langs}")
-            available_requested = [lang for lang in requested_langs if lang in available_langs]
-            if available_requested:
-                language = '+'.join(available_requested)
-            else:
-                language = 'eng' if 'eng' in available_langs else available_langs[0]
-                print(f"Using fallback language: {language}")
-    except Exception:
-        pass
+        # Try to use Chinese + English for better results
+        if 'chi_sim' in available_langs and 'eng' in available_langs:
+            language = 'chi_sim+eng'
+        elif 'chi_sim' in available_langs:
+            language = 'chi_sim'
+        elif 'eng' in available_langs:
+            language = 'eng'
+        else:
+            language = available_langs[0] if available_langs else 'eng'
+
+        print(f"Using language: {language}")
+    except Exception as e:
+        print(f"Could not get available languages: {e}")
+
+    # Improved OCR configuration for better Chinese recognition
+    # --oem 3: Use LSTM neural net engine (best for Chinese)
+    # --psm 6: Assume single uniform block of text
+    # -c preserve_interword_spaces=1: Keep spaces
+    custom_config = r'--oem 3 --psm 6 -c preserve_interword_spaces=1'
 
     try:
         text = pytesseract.image_to_string(
@@ -200,19 +200,36 @@ def extract_text(
         text = text.strip()
     except Exception as e:
         print(f"Error during OCR: {e}")
-        text = ""
+        # Fallback to basic config
+        try:
+            text = pytesseract.image_to_string(image, lang=language)
+            text = text.strip()
+        except Exception as e2:
+            print(f"Fallback OCR also failed: {e2}")
+            text = ""
 
     latex_result = None
 
-    if latex_mode or (auto_detect_math and contains_math_symbols(image)):
+    # LaTeX conversion
+    if latex_mode or (auto_detect_math and detect_math_content(image)):
         model = _get_latex_model()
         if model is not None:
             try:
-                latex_result = model(image)
-                if latex_result:
-                    latex_result = latex_result.strip()
+                print("Converting to LaTeX...")
+                # RapidLatexOCR expects PIL Image
+                result = model(image)
+                if result:
+                    # result might be a tuple or string depending on version
+                    if isinstance(result, tuple):
+                        latex_result = result[0] if result[0] else None
+                    else:
+                        latex_result = str(result).strip()
+                    if latex_result:
+                        print(f"LaTeX result: {latex_result[:100]}...")
             except Exception as e:
                 print(f"Warning: LaTeX conversion failed: {e}")
+                import traceback
+                traceback.print_exc()
 
     return text, latex_result
 
